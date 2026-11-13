@@ -1589,85 +1589,40 @@ body.vscode-dark code.language-json .hljs-comment {
 
 </head>
 <body>
-<h1 id="title-bar-theme-for-google-antigravity-chrome-extension-theme-for-antigravity">Title Bar Theme for Google Antigravity (<code>chrome-extension-theme-for-antigravity</code>)</h1>
-<p>A zero-configuration Manifest V3 Chrome extension that automatically synchronizes the window frame (title bar) and launch splash color of the <strong>Google Antigravity Remote Control</strong> Chrome Web App (<code>https://antigravity.google.com/</code>).</p>
-<hr>
-<h2 id="background">Background</h2>
-<p>By default, <code>https://antigravity.google.com/</code> serves <code>&lt;meta name=&quot;theme-color&quot; content=&quot;#1f1f1f&quot;&gt;</code> in its outer HTML <code>&lt;head&gt;</code> and <code>&quot;theme_color&quot;: &quot;#1f1f1f&quot;</code> in <code>/assets/manifest.json</code>, while rendering the actual Antigravity UI inside a full-screen cross-origin child <code>&lt;iframe&gt;</code> (<code>https://antigravity.static.usercontent.goog/*</code>). As a result, Chrome renders the standalone PWA window with a static <code>#1f1f1f</code> title bar regardless of your selected theme, contrast mode, or active modal overlays.</p>
-<p>This extension observes <code>.agy-shell</code> (<code>--shell</code>) and active modal backdrops (<code>.settings-modal-backdrop</code>, <code>[data-testid=&quot;modal-backdrop&quot;]</code>, <code>.aux-drawer-backdrop</code>) directly inside the UI iframe in real time, and automatically updates <code>&lt;meta name=&quot;theme-color&quot;&gt;</code> and the manifest <code>theme_color</code> / <code>background_color</code>:</p>
-<table>
-<thead>
-<tr>
-<th style="text-align:left">Theme</th>
-<th style="text-align:left">Contrast</th>
-<th style="text-align:left">Base Header Color</th>
-<th style="text-align:left">Settings / Modal Open (<code>30%</code> Scrim)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left"><strong>Light</strong></td>
-<td style="text-align:left">Default Contrast</td>
-<td style="text-align:left"><code>#fafafa</code> (<code>rgb(250, 250, 250)</code>)</td>
-<td style="text-align:left"><code>#afafaf</code> (<code>rgb(175, 175, 175)</code>)</td>
-</tr>
-<tr>
-<td style="text-align:left"><strong>Light</strong></td>
-<td style="text-align:left">Strong Contrast</td>
-<td style="text-align:left"><code>#f3f3f3</code> (<code>rgb(243, 243, 243)</code>)</td>
-<td style="text-align:left"><code>#aaaaaa</code> (<code>rgb(170, 170, 170)</code>)</td>
-</tr>
-<tr>
-<td style="text-align:left"><strong>Dark</strong></td>
-<td style="text-align:left">Default Contrast</td>
-<td style="text-align:left"><code>#111114</code> (<code>rgb(17, 17, 20)</code>)</td>
-<td style="text-align:left"><code>#0c0c0e</code> (<code>rgb(12, 12, 14)</code>)</td>
-</tr>
-<tr>
-<td style="text-align:left"><strong>Dark</strong></td>
-<td style="text-align:left">Strong Contrast</td>
-<td style="text-align:left"><code>#121216</code> (<code>rgb(18, 18, 22)</code>)</td>
-<td style="text-align:left"><code>#0d0d0f</code> (<code>rgb(13, 13, 15)</code>)</td>
-</tr>
-</tbody>
-</table>
-<p>Custom theme presets and custom background colors configured in <strong>Settings → Appearance</strong> are also resolved automatically from <code>--shell</code> and alpha-blended in real time whenever a modal overlay opens or closes.</p>
-<hr>
-<h2 id="repository-structure">Repository Structure</h2>
-<pre class="hljs"><code class="language-text"><div>chrome-extension-theme-for-antigravity/
-├── .agents/
-│   └── rules/
-│       └── rules-git.md            # Git commit identity rules
-├── icons/
-│   ├── icon16.png                  # Extension toolbar / management icons
-│   ├── icon48.png
-│   └── icon128.png                 # Chrome Web Store listing icon
-├── store/
-│   └── screenshot-1280x800.png     # Chrome Web Store listing screenshot (24-bit PNG)
-├── src/
-│   ├── background.js               # Manifest redirect rule &amp; live tab re-injection on reload
-│   ├── content.js                  # Top-frame &lt;meta name=&quot;theme-color&quot;&gt; lock &amp; storage sync
-│   ├── iframe-observer.js          # Real-time --shell &amp; Settings/modal overlay observer in UI iframe
-│   └── shared.js                   # Shared constants, hex validation, color blending &amp; DOM helpers
-├── build.ps1                       # Packages CWS-ready .zip bundle into dist\ (forward-slash entries)
-├── manifest.json                   # Chrome Extension Manifest V3
-├── privacy.md                      # Chrome Web Store privacy policy
-├── readme.md                       # Documentation (Markdown source)
-└── readme.md.html                  # Documentation (Standalone HTML)
-</div></code></pre>
-<hr>
-<h2 id="packaging--deployment">Packaging &amp; Deployment</h2>
-<h3 id="chrome-web-store-packaging-zip">Chrome Web Store Packaging (<code>.zip</code>)</h3>
-<p>Run <code>.\build.ps1</code> to produce <code>dist\chrome-extension-theme-for-antigravity-v&lt;version&gt;.zip</code> with <code>manifest.json</code> at the root and forward-slash (<code>/</code>) entry paths ready for upload in the Chrome Web Store Developer Dashboard.</p>
-<h3 id="automated-provisioning-powershell-software-installer">Automated Provisioning (<code>powershell-software-installer</code>)</h3>
-<p>Chrome Web Store Extension ID: <code>gffpamdcddmdbeljekjlpaknpmjlglni</code> (configured in <code>powershell-software-installer\manifest.psd1</code> under <code>winget_google_antigravity_remote_control</code>), so <a href="../powershell-software-installer/readme.md"><code>winget_google_antigravity_remote_control.ps1</code></a> installs both the Antigravity Chrome PWA and this extension automatically via Chrome Enterprise Policy (<code>HKLM:\SOFTWARE\Policies\Google\Chrome\ExtensionSettings</code>, mode <code>normal_installed</code>).</p>
-<h3 id="local-development-unpacked-extension">Local Development (Unpacked Extension)</h3>
+<h1 id="title-bar-theme-for-google-antigravity">Title Bar Theme for Google Antigravity</h1>
+<p>A lightweight, zero-configuration Chrome extension that matches the window title bar and startup screen of the <strong>Google Antigravity</strong> desktop app in Chrome to your active color theme.</p>
+<h2 id="what-is-this-project">What Is This Project?</h2>
+<p>When you install and run <a href="https://antigravity.google.com/">Google Antigravity</a> as a standalone Chrome app on Windows, it opens in its own dedicated window with a native desktop title bar across the top. This extension automatically keeps that window title bar and the app's launch screen in sync with the colors inside the Antigravity workspace.</p>
+<h2 id="why-does-it-exist">Why Does It Exist?</h2>
+<p>By default, Google Antigravity instructs Chrome to display a fixed dark-gray title bar at all times—even when you switch to Light mode, turn on Strong Contrast, choose a custom color in <strong>Settings → Appearance</strong>, or open a dimmed pop-up window such as Settings. That mismatch leaves a contrasting bar stuck across the top of your screen and causes a dark-gray flash when launching the app.</p>
+<p>This extension solves that automatically with zero settings to manage:</p>
+<ul>
+<li>Matches Light mode, Dark mode, Default Contrast, Strong Contrast, and custom Appearance themes.</li>
+<li>Dims smoothly in real time whenever Settings, drawers, or pop-up dialogs open and restores immediately when they close.</li>
+<li>Remembers your base theme color locally so launching the app opens with a matching startup screen instead of flashing an unmatched color.</li>
+</ul>
+<div class="markdown-alert markdown-alert-note"><p class="markdown-alert-title"><svg class="octicon octicon-info mr-2" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p><p>Window title bar coloring applies to <strong>standalone Chrome app windows</strong> (created via Chrome's <strong>menu (<code>⋮</code>) → Cast, save, and share → Install page as app…</strong>). Regular Chrome browser tabs use Chrome's normal tab strip and are unaffected.</p>
+</div>
+<h2 id="installation">Installation</h2>
+<h3 id="option-1-chrome-web-store-recommended">Option 1: Chrome Web Store (Recommended)</h3>
 <ol>
-<li>Open <code>chrome://extensions/</code> in Google Chrome.</li>
-<li>Enable <strong>Developer mode</strong> (top-right toggle).</li>
-<li>Click <strong>Load unpacked</strong> and select <code>D:\Development\chrome-extension-theme-for-antigravity</code> (or click <strong>Reload (<code>↻</code>)</strong> if already loaded).</li>
-<li>Open the <strong>Google Antigravity</strong> web app (<code>https://antigravity.google.com/</code>) — the window frame automatically matches your active theme, contrast level, and modal overlays in real time.</li>
+<li>Open the extension listing on the Chrome Web Store: <a href="https://chromewebstore.google.com/detail/gffpamdcddmdbeljekjlpaknpmjlglni">Title Bar Theme for Google Antigravity</a>.</li>
+<li>Click <strong>Add to Chrome</strong>.</li>
+<li>Open the Google Antigravity Chrome app—your title bar updates automatically with no further setup.</li>
 </ol>
+<h3 id="option-2-chrome-developer-mode-local-setup">Option 2: Chrome Developer Mode (Local Setup)</h3>
+<ol>
+<li>Clone or download this repository to a folder on your computer.</li>
+<li>Open Google Chrome and go to <code>chrome://extensions/</code>.</li>
+<li>Turn on <strong>Developer mode</strong> using the toggle in the top-right corner.</li>
+<li>Click <strong>Load unpacked</strong> in the top-left and select the root folder of this repository (the folder containing <code>manifest.json</code>).</li>
+<li>Open <strong>Google Antigravity</strong> (<code>https://antigravity.google.com/</code>) in its standalone Chrome app window.</li>
+</ol>
+<h2 id="documentation">Documentation</h2>
+<ul>
+<li><a href="./docs/technical.md"><strong>Technical Documentation</strong></a> — Architecture, implementation details, and design rationale.</li>
+<li><a href="./docs/privacy.md"><strong>Privacy Policy</strong></a> — Privacy details (zero data collection; all theme detection runs locally in your browser).</li>
+</ul>
 
 <script>
 (function () {

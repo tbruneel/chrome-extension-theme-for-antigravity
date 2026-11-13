@@ -1,13 +1,12 @@
 (() => {
   'use strict';
 
-  const Shared = globalThis.FrameColorShared;
-  if (!Shared || !Shared.claimRuntimeGuard('__frameColorContentGuard__')) {
+  const Shared = globalThis.TitleBarThemeShared;
+  if (!Shared || !Shared.claimRuntimeGuard('__titleBarThemeContentGuard__')) {
     return;
   }
 
-  const LOCAL_CACHE_KEY = '__ag_frame_color_cache__';
-  const LEGACY_CACHE_KEYS = ['__ag_pwa_frame_color_v12__', '__ag_pwa_frame_color_v11__'];
+  const LOCAL_CACHE_KEY = '__ag_title_bar_color_cache__';
   const IFRAME_ORIGIN = 'https://antigravity.static.usercontent.goog';
 
   // Exact Antigravity top header ("Antigravity" title bar) colors for the 4 standard presets:
@@ -29,15 +28,6 @@
       const direct = window.localStorage.getItem(LOCAL_CACHE_KEY);
       if (Shared.isValidHexColor(direct)) {
         return direct.toLowerCase();
-      }
-      for (const legacyKey of LEGACY_CACHE_KEYS) {
-        const legacy = window.localStorage.getItem(legacyKey);
-        if (Shared.isValidHexColor(legacy)) {
-          const normalized = legacy.toLowerCase();
-          window.localStorage.setItem(LOCAL_CACHE_KEY, normalized);
-          window.localStorage.removeItem(legacyKey);
-          return normalized;
-        }
       }
     } catch (_) {}
     return null;
@@ -110,9 +100,9 @@
     if (!Shared.isContextValid()) return;
     try {
       const iframes = document.querySelectorAll('iframe');
-      for (const frame of iframes) {
-        if (frame && frame.contentWindow) {
-          frame.contentWindow.postMessage({ __agFrameExtRequest: true }, '*');
+      for (const iframeEl of iframes) {
+        if (iframeEl && iframeEl.contentWindow) {
+          iframeEl.contentWindow.postMessage({ __agTitleBarExtRequest: true }, '*');
         }
       }
     } catch (_) {}
@@ -152,7 +142,7 @@
       return;
     }
     if (event.origin !== IFRAME_ORIGIN) return;
-    if (event.data && event.data.__agFrameExt === true) {
+    if (event.data && event.data.__agTitleBarExt === true) {
       event.stopImmediatePropagation();
       const { displayColor, baseColor } = event.data;
       if (!Shared.isValidHexColor(displayColor) || !Shared.isValidHexColor(baseColor)) {

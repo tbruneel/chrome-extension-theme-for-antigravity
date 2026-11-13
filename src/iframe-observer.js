@@ -5,8 +5,8 @@
     return;
   }
 
-  const Shared = globalThis.FrameColorShared;
-  if (!Shared || !Shared.claimRuntimeGuard('__frameColorIframeGuard__')) {
+  const Shared = globalThis.TitleBarThemeShared;
+  if (!Shared || !Shared.claimRuntimeGuard('__titleBarThemeIframeGuard__')) {
     return;
   }
 
@@ -164,7 +164,7 @@
     try {
       if (window.top && window.top !== window) {
         window.top.postMessage(
-          { __agFrameExt: true, displayColor, baseColor },
+          { __agTitleBarExt: true, displayColor, baseColor },
           HOST_ORIGIN
         );
       }
@@ -197,7 +197,7 @@
       teardown();
       return;
     }
-    if (event.origin === HOST_ORIGIN && event.data && event.data.__agFrameExtRequest === true) {
+    if (event.origin === HOST_ORIGIN && event.data && event.data.__agTitleBarExtRequest === true) {
       computeAndEmit(true);
     }
   }

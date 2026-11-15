@@ -8,8 +8,8 @@ const APP_CONFIG = {
   tabUrlPattern: 'https://antigravity.google.com/*',
   manifestUrlFilter: 'https://antigravity.google.com/assets/manifest.json*',
   injectionTargets: [
-    { allFrames: false, files: ['src/shared.js', 'src/content.js'] },
-    { allFrames: true, files: ['src/shared.js', 'src/iframe-observer.js'] }
+    { allFrames: false, files: ['source/shared.js', 'source/content.js'] },
+    { allFrames: true, files: ['source/shared.js', 'source/iframe-observer.js'] }
   ],
   buildManifest(color) {
     return {

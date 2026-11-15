@@ -18,7 +18,7 @@
     "https://antigravity.static.usercontent.goog/*"
   ],
   "background": {
-    "service_worker": "src/background.js"
+    "service_worker": "source/background.js"
   },
   "content_scripts": [
     {
@@ -26,8 +26,8 @@
         "https://antigravity.google.com/*"
       ],
       "js": [
-        "src/shared.js",
-        "src/content.js"
+        "source/shared.js",
+        "source/content.js"
       ],
       "run_at": "document_start"
     },
@@ -36,8 +36,8 @@
         "https://antigravity.static.usercontent.goog/*"
       ],
       "js": [
-        "src/shared.js",
-        "src/iframe-observer.js"
+        "source/shared.js",
+        "source/iframe-observer.js"
       ],
       "all_frames": true,
       "run_at": "document_start"

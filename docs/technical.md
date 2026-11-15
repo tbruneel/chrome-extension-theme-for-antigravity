@@ -22,9 +22,6 @@ In `https://antigravity.google.com/`, four platform constraints prevent a single
 
 ```text
 chrome-extension-theme-for-antigravity/
-├── .agents/
-│   └── rules/
-│       └── rules-git.md            # Git commit identity rules
 ├── assets/
 │   ├── icon16.png                  # Extension icons
 │   ├── icon48.png
@@ -32,21 +29,18 @@ chrome-extension-theme-for-antigravity/
 │   └── screenshot-1280x800.png     # Chrome Web Store listing screenshot (excluded from .zip)
 ├── docs/
 │   ├── privacy.md                  # Privacy policy (Markdown)
-│   ├── privacy.md.html             # Privacy policy (Standalone HTML)
-│   ├── technical.md                # Technical documentation (Markdown)
-│   └── technical.md.html           # Technical documentation (Standalone HTML)
-├── src/
+│   └── technical.md                # Technical documentation (Markdown)
+├── source/
 │   ├── background.js               # MV3 service worker: declarativeNetRequest & tab re-injection
 │   ├── content.js                  # Top-level document controller: zero-flash cache & <meta> lock
 │   ├── iframe-observer.js          # Cross-origin iframe observer: --shell & modal scrim detector
 │   └── shared.js                   # Shared guards, 1x1 canvas color resolver, alpha blender & DOM helper
-├── build.ps1                       # Packages CWS-ready .zip archive into dist\
+├── build.ps1                       # Packages CWS-ready .zip archive into package\
 ├── manifest.json                   # Extension Manifest V3 (kept at root for Load unpacked)
-├── readme.md                       # Non-technical project overview (Markdown)
-└── readme.md.html                  # Non-technical project overview (Standalone HTML)
+└── readme.md                       # Non-technical project overview (Markdown)
 ```
 
-**Why `manifest.json` stays at the repository root:** Chrome's `chrome://extensions` → **Load unpacked** requires `manifest.json` directly inside the selected folder and forbids `../` parent path traversal in extension URLs. Keeping [`manifest.json`](../manifest.json) at the root allows immediate developer-mode loading straight from the cloned repository without an extra staging step, while keeping source files under `src/`, media under `assets/`, and documentation under `docs/`.
+**Why `manifest.json` stays at the repository root:** Chrome's `chrome://extensions` → **Load unpacked** requires `manifest.json` directly inside the selected folder and forbids `../` parent path traversal in extension URLs. Keeping [`manifest.json`](../manifest.json) at the root allows immediate developer-mode loading straight from the cloned repository without an extra staging step, while keeping source files under `source/`, media under `assets/`, and documentation under `docs/`.
 
 ### End-to-End Signal Flow
 
@@ -63,7 +57,7 @@ flowchart LR
 
 ## 3. Component Implementation & Design Rationale
 
-### 3.1 Shared Color & DOM Utilities ([`src/shared.js`](../src/shared.js))
+### 3.1 Shared Color & DOM Utilities ([`source/shared.js`](../source/shared.js))
 
 Injected into both the top-level document, the child iframe, and imported via `importScripts('./shared.js')` in the service worker to keep constants, color math, and DOM mutation logic unified:
 
@@ -81,7 +75,7 @@ $$C_{\text{out}} = \text{round}\!\left(\alpha \cdot C_{\text{overlay}} + (1 - \a
   - Checks whether a single `<meta name="theme-color">` tag with the target `content` and no `media` attribute already exists, returning early when synchronized so modifying the `<head>` never triggers an infinite `MutationObserver` cycle.
   - When out of sync, mutates the first tag in place, strips any `media` attribute (so page-level `prefers-color-scheme` meta rules cannot override the calculated color), and removes duplicate tags.
 
-### 3.2 Cross-Origin UI Observer ([`src/iframe-observer.js`](../src/iframe-observer.js))
+### 3.2 Cross-Origin UI Observer ([`source/iframe-observer.js`](../source/iframe-observer.js))
 
 Runs in `https://antigravity.static.usercontent.goog/*` (`all_frames: true`, `run_at: "document_start"`):
 
@@ -104,7 +98,7 @@ Runs in `https://antigravity.static.usercontent.goog/*` (`all_frames: true`, `ru
 - **Why `displayColor` and `baseColor` Are Separated:**
   - `window.top.postMessage({ __agTitleBarExt: true, displayColor, baseColor }, 'https://antigravity.google.com')` sends both values. `displayColor` drives the live title bar immediately (including dimmed states), while only undimmed `baseColor` is persisted to storage. That ensures closing Antigravity while Settings or a modal is open never poisons the startup splash color on the next launch.
 
-### 3.3 Top-Level Document Controller & Zero-Flash Startup ([`src/content.js`](../src/content.js))
+### 3.3 Top-Level Document Controller & Zero-Flash Startup ([`source/content.js`](../source/content.js))
 
 Runs on `https://antigravity.google.com/*` at `run_at: "document_start"`:
 
@@ -115,7 +109,7 @@ Runs on `https://antigravity.google.com/*` at `run_at: "document_start"`:
   - Registers in the capture phase (`useCapture = true`), verifies `event.origin === 'https://antigravity.static.usercontent.goog'`, validates 6-digit `#RRGGBB` payloads, calls `event.stopImmediatePropagation()` so page scripts never observe extension bridge traffic, and falls back to host theme state if the child `<iframe>` unmounts (e.g., returning to the project picker).
   - Actively sends `{ __agTitleBarExtRequest: true }` at `DOMContentLoaded` and `load` to handle race conditions where the iframe initializes before the parent listener attaches.
 
-### 3.4 Service Worker & Manifest Redirect ([`src/background.js`](../src/background.js))
+### 3.4 Service Worker & Manifest Redirect ([`source/background.js`](../source/background.js))
 
 Runs as the Manifest V3 extension service worker:
 
@@ -142,7 +136,7 @@ Defined in [`manifest.json`](../manifest.json) under the principle of least priv
 
 ### Extension Packaging ([`build.ps1`](../build.ps1))
 
-Running `.\build.ps1` validates every icon and script referenced in [`manifest.json`](../manifest.json), appends all runtime files under `src/`, and writes `dist\chrome-extension-theme-for-antigravity-v<version>.zip` (`8` entries) with normalized forward-slash (`/`) ZIP paths required by the Chrome Web Store upload validator. Non-runtime files (`assets/screenshot-1280x800.png`, `docs/*`, `readme.md*`) are intentionally excluded from the archive.
+Running `.\build.ps1` validates every icon and script referenced in [`manifest.json`](../manifest.json), appends all runtime files under `source/`, and writes `package\chrome-extension-theme-for-antigravity-v<version>.zip` (`8` entries) with normalized forward-slash (`/`) ZIP paths required by the Chrome Web Store upload validator. Non-runtime files (`assets/screenshot-1280x800.png`, `docs/*`, `readme.md*`) are intentionally excluded from the archive.
 
 ### Automated Policy Provisioning (`powershell-software-installer`)
 

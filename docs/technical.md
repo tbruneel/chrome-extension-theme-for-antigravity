@@ -1,146 +1,118 @@
 # Technical Documentation — Title Bar Theme for Google Antigravity
 
-This document explains **what** is implemented in `chrome-extension-theme-for-antigravity`, **how** the extension coordinates across origin boundaries and startup phases, and **why** each architectural decision was made.
+Architecture, cross-origin theme and modal scrim compositing, PWA manifest redirection, permission boundaries, and Chrome Web Store packaging across [`manifest.json`](../manifest.json), [`source/shared.js`](../source/shared.js), [`source/iframe-observer.js`](../source/iframe-observer.js), [`source/content.js`](../source/content.js), [`source/background.js`](../source/background.js), and [`build.ps1`](../build.ps1).
 
-## 1. Problem Statement — Why a Simple Content Script Isn't Enough
-
-On Windows, Chromium paints a standalone Progressive Web App (PWA) window's title bar and launch splash screen from two signals:
-
-- **Cold launch / splash screen:** `theme_color` and `background_color` inside the Web App Manifest (`/assets/manifest.json`) fetched when the PWA starts.
-- **Live window title bar:** `<meta name="theme-color">` in the **top-level document `<head>`**. `<meta name="theme-color">` tags placed inside nested `<iframe>` elements are ignored by Chromium.
-
-In `https://antigravity.google.com/`, four platform constraints prevent a single-script `<meta>` update from working reliably:
-
-1. **Hardcoded `#1f1f1f` Outer Shell:** Both the outer HTML `<head>` (`<meta name="theme-color" content="#1f1f1f">`) and `/assets/manifest.json` (`"theme_color": "#1f1f1f"`) serve a static dark gray value regardless of user preferences.
-2. **Cross-Origin UI Iframe (`https://antigravity.static.usercontent.goog/*`):** The actual Antigravity IDE/Remote Control workspace, `.agy-shell`, Appearance theme variables (`--shell`), and modal dialogs render inside a full-viewport cross-origin `<iframe>`. Browser Same-Origin Policy (SOP) blocks top-level document scripts from reading iframe styles/DOM and blocks iframe scripts from mutating the outer document's `<head>`.
-3. **CSS Color 4 Expressions & Semi-Transparent Modal Scrims:** Theme surfaces and overlays use modern CSS Color 4 syntax (`oklab(...)`, `color(srgb ...)`) and semi-transparent backdrops (`30%` alpha scrims). Chromium's title bar requires a flat opaque color, so translucent overlays must be resolved and alpha-composited onto the underlying header RGB in JavaScript.
-4. **Startup & Cold-Launch Flash:** Reading `chrome.storage` asynchronously or waiting for the cross-origin iframe to mount causes a visible `#1f1f1f` title bar flash before settling on the user's true theme color.
-
-## 2. Architecture & Repository Layout
-
-### Tracked Repository Layout
+## 1. Architecture & Repository Layout
 
 ```text
 chrome-extension-theme-for-antigravity/
+├── .gitignore                        # Ignores package/, *.zip, *.crx, *.pem, *.htmd
 ├── assets/
-│   ├── icon16.png                  # Extension icons
+│   ├── icon16.png                    # Toolbar and extension icons
 │   ├── icon48.png
-│   ├── icon128.png                 # Chrome Web Store listing icon
-│   └── screenshot-1280x800.png     # Chrome Web Store listing screenshot (excluded from .zip)
+│   ├── icon128.png                   # Chrome Web Store listing icon
+│   └── screenshot-1280x800.png       # Chrome Web Store & README preview screenshot (excluded from .zip)
 ├── docs/
-│   ├── privacy.md                  # Privacy policy (Markdown)
-│   └── technical.md                # Technical documentation (Markdown)
+│   ├── privacy.md                    # Zero-collection privacy policy
+│   └── technical.md                  # Cross-origin architecture, color math & packaging reference
 ├── source/
-│   ├── background.js               # MV3 service worker: declarativeNetRequest & tab re-injection
-│   ├── content.js                  # Top-level document controller: zero-flash cache & <meta> lock
-│   ├── iframe-observer.js          # Cross-origin iframe observer: --shell & modal scrim detector
-│   └── shared.js                   # Shared guards, 1x1 canvas color resolver, alpha blender & DOM helper
-├── build.ps1                       # Packages CWS-ready .zip archive into package\
-├── manifest.json                   # Extension Manifest V3 (kept at root for Load unpacked)
-└── readme.md                       # Non-technical project overview (Markdown)
+│   ├── background.js                 # MV3 service worker: declarativeNetRequest redirect & tab re-injection
+│   ├── content.js                    # Top-level frame controller: zero-flash cache & meta lock
+│   ├── iframe-observer.js            # Cross-origin iframe observer: --shell & modal scrim detector
+│   └── shared.js                     # Shared guards, 1x1 canvas CSS color resolver, alpha blender & meta helper
+├── build.ps1                         # Validates manifest paths and packages package\<repo>-v<ver>.zip
+├── manifest.json                     # Extension Manifest V3 (kept at root for Load unpacked)
+└── readme.md                         # User-facing overview, preview, installation & companion links
 ```
 
-**Why `manifest.json` stays at the repository root:** Chrome's `chrome://extensions` → **Load unpacked** requires `manifest.json` directly inside the selected folder and forbids `../` parent path traversal in extension URLs. Keeping [`manifest.json`](../manifest.json) at the root allows immediate developer-mode loading straight from the cloned repository without an extra staging step, while keeping source files under `source/`, media under `assets/`, and documentation under `docs/`.
-
-### End-to-End Signal Flow
+**Why `manifest.json` stays at the repository root:** Chrome's `chrome://extensions` **Load unpacked** flow requires `manifest.json` directly inside the selected directory and disallows `../` parent path traversal in extension resource URLs. Keeping [`manifest.json`](../manifest.json) at the root allows developer-mode loading directly from a git checkout while keeping scripts under `source/`, images under `assets/`, and documentation under `docs/`.
 
 ```mermaid
 flowchart LR
-  Iframe["iframe-observer.js (https://antigravity.static.usercontent.goog)"] -->|"1. Reads .agy-shell / --shell & modal overlays"| Calc["shared.js (1x1 canvas + alpha composite)"]
-  Calc -->|"2. postMessage: displayColor + baseColor"| Top["content.js (https://antigravity.google.com)"]
-  Top -->|"3. Updates title bar immediately (displayColor)"| Meta["meta name=theme-color (top-level document)"]
-  Top -->|"4. Caches baseColor synchronously"| LS["window.localStorage (zero-flash startup)"]
-  Top -->|"5. Persists baseColor asynchronously"| Sync["chrome.storage.sync (titleBarColor)"]
-  Sync -->|"6. chrome.storage.onChanged / onStartup"| SW["background.js (MV3 Service Worker)"]
-  SW -->|"7. updateDynamicRules (RULE_ID = 1)"| DNR["declarativeNetRequest -> data:application/manifest+json"]
+  Iframe["iframe-observer.js (https://antigravity.static.usercontent.goog)"] -->|"Reads .agy-shell / --shell & modal overlays"| Calc["shared.js (1x1 canvas + alpha composite)"]
+  Calc -->|"postMessage: displayColor + baseColor"| Top["content.js (https://antigravity.google.com)"]
+  Top -->|"Sets live title bar color"| Meta["meta[name='theme-color']"]
+  Top -->|"Caches baseColor synchronously"| LS["window.localStorage (__ag_title_bar_color_cache__)"]
+  Top -->|"Persists baseColor asynchronously"| Sync["chrome.storage.sync (titleBarColor)"]
+  Sync -->|"onChanged / onStartup"| SW["background.js (MV3 Service Worker)"]
+  SW -->|"updateDynamicRules (RULE_ID = 1)"| DNR["declarativeNetRequest -> data:application/manifest+json"]
 ```
 
-## 3. Component Implementation & Design Rationale
+## 2. Design Constraints & Rationale
+
+On Windows, Chromium drives a standalone PWA window frame and launch screen from two independent sources: a `<meta name="theme-color">` element in the top-level document `<head>` for the live window title bar (tags inside nested `<iframe>` elements are ignored), and the Web App Manifest (`theme_color` and `background_color` in `/assets/manifest.json`) fetched before any page script executes for the cold-launch splash screen.
+
+Four behaviors on `https://antigravity.google.com/` prevent a single-frame script from keeping both synchronized:
+
+1. **Static `#1f1f1f` Outer Shell & Manifest:** The outer host HTML (`<meta name="theme-color" content="#1f1f1f">`) and `/assets/manifest.json` hardcode dark gray regardless of the user's workspace appearance.
+2. **Cross-Origin Workspace Iframe (`https://antigravity.static.usercontent.goog/*`):** `.agy-shell`, `--shell`, custom Appearance presets, and Settings modals live inside a sandboxed cross-origin `<iframe>`. Browser Same-Origin Policy blocks top-level scripts from reading iframe styles and blocks iframe scripts from editing top-level `<head>` tags.
+3. **CSS Color 4 & Translucent Modal Scrims:** Workspace surfaces and overlays use CSS Color 4 syntax (`oklab(...)`, `color(srgb ...)`) and semi-transparent backdrops (`~0.3` alpha scrims). Chromium's native frame requires an opaque sRGB `#rrggbb` hex value, so translucent scrims must be rasterized and alpha-blended onto the underlying header RGB.
+4. **Pre-Hydration Startup Flash:** Waiting for asynchronous `chrome.storage` reads or cross-origin `<iframe>` mounting flashes `#1f1f1f` on every app launch before settling on the true color.
+
+## 3. Core Components & Runtime Coordination
 
 ### 3.1 Shared Color & DOM Utilities ([`source/shared.js`](../source/shared.js))
 
-Injected into both the top-level document, the child iframe, and imported via `importScripts('./shared.js')` in the service worker to keep constants, color math, and DOM mutation logic unified:
+Injected ahead of both content scripts (`run_at: "document_start"`) and loaded inside the MV3 service worker via `importScripts('./shared.js')`, `source/shared.js` exposes an immutable `globalThis.TitleBarThemeShared` namespace.
 
-- **Idempotent Runtime Guards & Orphan Teardown (`claimRuntimeGuard`, `isContextValid`):**
-  - `claimRuntimeGuard(flagName)` stores `chrome.runtime.id` on `globalThis[flagName]`. If `onInstalled` re-injects scripts in the same extension runtime, duplicate injections exit immediately. Conversely, when the extension updates or reloads in Developer Mode, stale content scripts from the previous runtime receive `isContextValid() === false` (`chrome.runtime.id` becomes inaccessible), triggering `teardown()` to disconnect `MutationObserver` and remove event listeners cleanly.
-- **CSS Color 4 Rasterization (`resolveOpaqueRgb`, `parseCssColorWithAlpha`):**
-  - Fast regex paths handle `#RRGGBB` and `rgb()`/`rgba()` directly.
-  - For modern CSS Color 4 expressions (for example `oklab(0 0 0 / 0.3)` or `color(srgb ...)`), `parseCssColorWithAlpha` extracts trailing `/ alpha` percentages/decimals and passes the opaque color expression to a lazy `1×1` 2D `<canvas>` context (`{ willReadFrequently: true }`). Using Chromium's native canvas CSS parser guarantees bit-accurate sRGB resolution across any future CSS color space without bundling a color conversion library.
-- **Alpha Scrim Blending (`blendOverlayOntoBase`):**
-  - Standard source-over compositing computes the exact opaque `#rrggbb` title bar color matching a translucent modal backdrop over the header:
+- **Idempotent Guards & Orphan Teardown (`claimRuntimeGuard`, `isContextValid`):** `claimRuntimeGuard(flagName)` stores `chrome.runtime.id` on `globalThis[flagName]`. Re-injections during `chrome.runtime.onInstalled` no-op cleanly when the same runtime ID holds the guard, while orphaned listeners left after an extension reload detect `isContextValid() === false` and call `teardown()` to disconnect `MutationObserver` and remove window listeners.
+- **CSS Color 4 Resolution & Scrim Blending (`resolveOpaqueRgb`, `parseCssColorWithAlpha`, `blendOverlayOntoBase`):** `#RRGGBB` and `rgb()`/`rgba()` strings resolve directly via regex fast paths, whereas arbitrary CSS Color 4 expressions (for example `oklab(0 0 0 / 0.3)` or `color(srgb ...)`) split any trailing `/ alpha` clause and rasterize the base expression onto a lazy `1x1` 2D `<canvas>` (`{ willReadFrequently: true }`) using Chromium's native color engine. Active translucent overlays composite over `baseRgb` via standard source-over blending:
 
 $$C_{\text{out}} = \text{round}\!\left(\alpha \cdot C_{\text{overlay}} + (1 - \alpha) \cdot C_{\text{base}}\right)$$
 
-- **Non-Looping `<meta>` Enforcement (`applyThemeColorMeta`):**
-  - Checks whether a single `<meta name="theme-color">` tag with the target `content` and no `media` attribute already exists, returning early when synchronized so modifying the `<head>` never triggers an infinite `MutationObserver` cycle.
-  - When out of sync, mutates the first tag in place, strips any `media` attribute (so page-level `prefers-color-scheme` meta rules cannot override the calculated color), and removes duplicate tags.
+- **Non-Looping `<meta>` Synchronization (`applyThemeColorMeta`):** Returns early if a single `<meta name="theme-color">` tag with no `media` attribute already carries `color`; otherwise updates the first tag in place (creating one under `document.head || document.documentElement` if absent), strips `media`, and removes duplicate tags so DOM observations never self-trigger.
 
-### 3.2 Cross-Origin UI Observer ([`source/iframe-observer.js`](../source/iframe-observer.js))
+### 3.2 Cross-Origin Workspace Observer ([`source/iframe-observer.js`](../source/iframe-observer.js))
 
-Runs in `https://antigravity.static.usercontent.goog/*` (`all_frames: true`, `run_at: "document_start"`):
+Running in `https://antigravity.static.usercontent.goog/*` (`all_frames: true`, `run_at: "document_start"`), `resolveBaseShellRgb` inspects computed `backgroundColor` on `.agy-shell` and falls back to inline `--shell` on `document.documentElement`, covering all four built-in themes and custom **Settings -> Appearance** colors:
 
-- **Base Header Detection (`resolveBaseShellRgb`):**
-  - Reads computed `backgroundColor` on `.agy-shell`, falling back to inline `--shell` on `document.documentElement`. This handles all four built-in theme presets as well as custom colors configured under **Settings → Appearance**:
-
-| Theme | Contrast | Base Header Color (`--shell`) | Settings / Modal Open (`30%` Scrim) |
+| Theme | Contrast | Base Header (`--shell`) | Modal / Scrim Open (`30%` Scrim) |
 | :--- | :--- | :--- | :--- |
 | **Light** | Default Contrast | `#fafafa` (`rgb(250, 250, 250)`) | `#afafaf` (`rgb(175, 175, 175)`) |
 | **Light** | Strong Contrast | `#f3f3f3` (`rgb(243, 243, 243)`) | `#aaaaaa` (`rgb(170, 170, 170)`) |
 | **Dark** | Default Contrast | `#111114` (`rgb(17, 17, 20)`) | `#0c0c0e` (`rgb(12, 12, 14)`) |
 | **Dark** | Strong Contrast | `#121216` (`rgb(18, 18, 22)`) | `#0d0d0f` (`rgb(13, 13, 15)`) |
 
-- **Three-Tier Modal Overlay Detection (`detectActiveOverlay`):**
-  1. **Settings Modal (`.settings-modal-backdrop`):** Filters out hidden or fading-out backdrops (`aria-hidden="true"`, `.animate-modalFadeOut`, `.pointer-events-none`, `display: none`, `visibility: hidden`). In narrow/full-bleed responsive mode (`top <= 1`, `width >= vw - 2`, `height > 100`), `.settings-modal-container` fills the top edge directly, so its opaque surface (`a = 1`) is used; otherwise the backdrop scrim alpha (`~0.3`) is parsed and composited.
-  2. **Base UI Modals, Drawers & Popovers:** Inspects `[data-testid="modal-backdrop"]`, `.aux-drawer-backdrop`, `.bg-overlay-default`, and `[data-testid="side-panel-popover"] > div`, skipping exit transitions (`[data-ending-style]`) and confirming top-edge coverage (`top <= 2`, `width >= 0.8 * vw`, `height >= 40`).
-  3. **Top-Edge Hit-Test Fallback (`document.elementsFromPoint`):** Samples `y = 8` above `.agy-shell` (`width >= 0.8 * vw`, `height >= 0.8 * vh`, `0.05 <= a < 0.99`) to catch any future full-window overlay selectors without hardcoding class names.
-- **Observer Coalescing (`scheduleCheck`):**
-  - Observes `document.documentElement` for `childList`, `subtree`, and style/state attributes (`style`, `class`, `aria-hidden`, `data-ending-style`, `data-agy-theme`, `open`, `data-state`), running both an immediate pass and one coalesced `requestAnimationFrame` pass so next-paint CSS transitions settle cleanly.
-- **Why `displayColor` and `baseColor` Are Separated:**
-  - `window.top.postMessage({ __agTitleBarExt: true, displayColor, baseColor }, 'https://antigravity.google.com')` sends both values. `displayColor` drives the live title bar immediately (including dimmed states), while only undimmed `baseColor` is persisted to storage. That ensures closing Antigravity while Settings or a modal is open never poisons the startup splash color on the next launch.
+Modal dimming runs through a three-tier `detectActiveOverlay` check: (1) `.settings-modal-backdrop` (ignoring `aria-hidden="true"`, `.animate-modalFadeOut`, `.pointer-events-none`, hidden elements, and returning the opaque `.settings-modal-container` surface in full-bleed mode `top <= 1 && width >= vw - 2 && height > 100`), (2) Base UI overlays (`[data-testid="modal-backdrop"], .aux-drawer-backdrop, .bg-overlay-default, [data-testid="side-panel-popover"] > div` covering `top <= 2`, `width >= 0.8 * vw`, `height >= 40` without `[data-ending-style]`), and (3) a `document.elementsFromPoint` hit-test at `y = 8` for translucent overlays (`0.05 <= a < 0.99`, `width >= 0.8 * vw`, `height >= 0.8 * vh`). `scheduleCheck` fires once immediately and coalesces a `requestAnimationFrame` follow-up, posting `{ __agTitleBarExt: true, displayColor, baseColor }` to `https://antigravity.google.com`. Keeping `displayColor` and `baseColor` separate ensures closing Antigravity while a modal is open never persists a dimmed color into the next startup splash screen.
 
-### 3.3 Top-Level Document Controller & Zero-Flash Startup ([`source/content.js`](../source/content.js))
+### 3.3 Top-Level Controller & Zero-Flash Cache ([`source/content.js`](../source/content.js))
 
-Runs on `https://antigravity.google.com/*` at `run_at: "document_start"`:
-
-- **Zero-Flash Synchronous Paint (`detectFallbackHostColor`):**
-  - Executes before `<head>` finishes parsing. Reads `window.localStorage['__ag_title_bar_color_cache__']` synchronously and applies `<meta name="theme-color">` immediately.
-  - On first launch before cache exists, derives the starting preset from Antigravity's native host `localStorage` keys (`bcsp` for Light/Dark and `*.jetski.contrast === '2'` for Strong Contrast) and `body.dark-theme` / `body.dark`.
-- **Origin-Validated Capture Listener (`onWindowMessage`):**
-  - Registers in the capture phase (`useCapture = true`), verifies `event.origin === 'https://antigravity.static.usercontent.goog'`, validates 6-digit `#RRGGBB` payloads, calls `event.stopImmediatePropagation()` so page scripts never observe extension bridge traffic, and falls back to host theme state if the child `<iframe>` unmounts (e.g., returning to the project picker).
-  - Actively sends `{ __agTitleBarExtRequest: true }` at `DOMContentLoaded` and `load` to handle race conditions where the iframe initializes before the parent listener attaches.
+Running in `https://antigravity.google.com/*` at `run_at: "document_start"`, `detectFallbackHostColor` reads `window.localStorage['__ag_title_bar_color_cache__']` synchronously before `<head>` finishes parsing—or falls back on first launch to `localStorage['bcsp']`, `body.dark-theme`/`body.dark`, and `localStorage['*.jetski.contrast'] === '2'`—to lock `<meta name="theme-color">` with zero startup flash. A capture-phase listener (`onWindowMessage`, `useCapture = true`) validates `event.origin === 'https://antigravity.static.usercontent.goog'` and 6-digit `#RRGGBB` payloads, calls `event.stopImmediatePropagation()` to isolate extension messages from page scripts, falls back cleanly when no child `<iframe>` remains in `document.body`, and sends `{ __agTitleBarExtRequest: true }` at `DOMContentLoaded` and `load`.
 
 ### 3.4 Service Worker & Manifest Redirect ([`source/background.js`](../source/background.js))
 
-Runs as the Manifest V3 extension service worker:
+`updateManifestRedirectRule` reads `titleBarColor` from `chrome.storage.sync` (default `#fafafa`) and registers `chrome.declarativeNetRequest` dynamic rule `RULE_ID = 1` matching `https://antigravity.google.com/assets/manifest.json*` (`resourceTypes: ['other', 'xmlhttprequest', 'sub_frame', 'main_frame']`), redirecting the manifest request to an inline `data:application/manifest+json;charset=utf-8,...` payload with matching `background_color` and `theme_color`. On `chrome.runtime.onInstalled`, `reinjectOpenTabs` injects `source/shared.js` + `source/content.js` into top-level Antigravity frames and `source/shared.js` + `source/iframe-observer.js` into all subframes so updates take effect without reloading open windows.
 
-- **Dynamic Manifest Override (`declarativeNetRequest`):**
-  - Reads `titleBarColor` from `chrome.storage.sync` (default `#fafafa`) and installs dynamic rule `RULE_ID = 1` matching `https://antigravity.google.com/assets/manifest.json*`.
-  - Redirects the request to an inline `data:application/manifest+json;charset=utf-8,...` URI mirroring Antigravity's original manifest metadata (`short_name`, `name`, `start_url`, `icons`, `display: "standalone"`) with `background_color` and `theme_color` set dynamically to `titleBarColor`.
-  - Why `declarativeNetRequest`? Chrome caches and consults the Web App Manifest when opening a standalone PWA window before any DOM content script executes. Rewriting `/assets/manifest.json` at the network layer guarantees the cold-launch splash screen matches the user's persisted theme.
-- **Zero-Reload Activation (`reinjectOpenTabs`):**
-  - On `chrome.runtime.onInstalled`, queries open `https://antigravity.google.com/*` tabs and runs `chrome.scripting.executeScript` in both the top-level document (`shared.js` + `content.js`) and child iframes (`shared.js` + `iframe-observer.js`), activating updates immediately without requiring a manual tab refresh.
+## 4. Storage, Bridge & Permission Reference
 
-## 4. Permissions & Security Model
+| Key / Identifier | Scope / Channel | Format / Value | Role |
+| :--- | :--- | :--- | :--- |
+| `__ag_title_bar_color_cache__` | `window.localStorage` (`antigravity.google.com`) | `#rrggbb` | Synchronous zero-flash startup tint before iframe mount. |
+| `titleBarColor` | `chrome.storage.sync` (default `#fafafa`) | `#rrggbb` | Persisted `baseColor` driving service-worker manifest redirects. |
+| `RULE_ID = 1` | `chrome.declarativeNetRequest` | Dynamic redirect rule | Rewrites `/assets/manifest.json*` to inline `data:application/manifest+json`. |
+| `__agTitleBarExt` | Cross-origin `window.postMessage` (child -> top) | `{ __agTitleBarExt: true, displayColor, baseColor }` | Delivers live scrim-blended color plus undimmed base color. |
+| `__agTitleBarExtRequest` | Cross-origin `window.postMessage` (top -> child) | `{ __agTitleBarExtRequest: true }` | Handshake prompting immediate emit on `DOMContentLoaded` / `load`. |
 
-Defined in [`manifest.json`](../manifest.json) under the principle of least privilege:
+Defined in [`manifest.json`](../manifest.json) under least privilege:
 
-| Permission / Host | Purpose | Why Broader Access Is Avoided |
+| Permission / Host | Purpose | Boundary |
 | :--- | :--- | :--- |
-| `storage` | Persists only `titleBarColor` (`#rrggbb`) in `chrome.storage.sync` so `background.js` can update the manifest redirect rule across browser restarts. | No user profile, browsing history, or page data is stored. See [`privacy.md`](./privacy.md). |
-| `declarativeNetRequest` | Installs `RULE_ID = 1` redirecting `/assets/manifest.json*` to a localized `data:application/manifest+json` URI with updated `theme_color` / `background_color`. | Avoids blocking `webRequest` interception while preserving offline-instant redirect evaluation inside Chromium. |
-| `scripting` | Re-injects scripts into open Antigravity tabs inside `onInstalled` so updates apply immediately without page reload. | Scoped strictly to matched `host_permissions` origins; `tabs` permission is unnecessary and omitted. |
-| `https://antigravity.google.com/*` | Hosts the top-level document controller (`content.js`) and `/assets/manifest.json` redirect rule. | Prevents injection on any other Google domain or external site. |
-| `https://antigravity.static.usercontent.goog/*` | Hosts the UI iframe observer (`iframe-observer.js`). | Strictly limited to the exact sandboxed UI origin used by Antigravity. |
+| `storage` | Syncs only the 7-character `titleBarColor` (`#rrggbb`) hex string across Chrome sessions. | Zero user profile, telemetry, or browsing data stored. See [`privacy.md`](./privacy.md). |
+| `declarativeNetRequest` | Redirects `/assets/manifest.json*` to an offline `data:application/manifest+json` manifest with synchronized theme colors. | Native Chromium rule evaluation with no blocking `webRequest` interception. |
+| `scripting` | Re-injects extension scripts into open Antigravity tabs and subframes inside `onInstalled`. | Scoped strictly to `host_permissions`; `tabs` permission is omitted. |
+| `https://antigravity.google.com/*` | Hosts `source/content.js` and the top-level manifest redirect target. | Excludes all other websites and Google subdomains. |
+| `https://antigravity.static.usercontent.goog/*` | Hosts `source/iframe-observer.js` inside the sandboxed workspace UI iframe. | Strictly limited to the workspace UI origin. |
 
-## 5. Build Packaging & Automated Provisioning
+## 5. Build, Debug & Packaging
 
-### Extension Packaging ([`build.ps1`](../build.ps1))
+```powershell
+# Validate manifest.json entries and output package\chrome-extension-theme-for-antigravity-v<version>.zip
+.\build.ps1
 
-Running `.\build.ps1` validates every icon and script referenced in [`manifest.json`](../manifest.json), appends all runtime files under `source/`, and writes `package\chrome-extension-theme-for-antigravity-v<version>.zip` (`8` entries) with normalized forward-slash (`/`) ZIP paths required by the Chrome Web Store upload validator. Non-runtime files (`assets/screenshot-1280x800.png`, `docs/*`, `readme.md*`) are intentionally excluded from the archive.
+# Inspect packaged archive entries (8 forward-slash paths expected)
+[System.IO.Compression.ZipFile]::OpenRead((Resolve-Path .\package\chrome-extension-theme-for-antigravity-*.zip)).Entries.FullName
+```
 
-### Automated Policy Provisioning (`powershell-software-installer`)
+Running [`build.ps1`](../build.ps1) validates every icon, background worker, and content script in [`manifest.json`](../manifest.json), collects runtime scripts under `source/`, and writes `package\chrome-extension-theme-for-antigravity-v<version>.zip` (`8` entries) using forward-slash (`/`) ZIP paths required by the Chrome Web Store upload validator while omitting `assets/screenshot-1280x800.png`, `docs/`, `readme.md`, and `*.htmd`. [`.gitignore`](../.gitignore) excludes `package/`, `*.zip`, `*.crx`, `*.pem`, and `*.htmd` from version control.
 
-Chrome Web Store Extension ID `gffpamdcddmdbeljekjlpaknpmjlglni` is configured in the sibling [`powershell-software-installer`](../../powershell-software-installer/readme.md) bundle (`winget_google_antigravity_remote_control`) alongside the Antigravity Chrome PWA:
-
-- Writes Chrome Enterprise Policy `HKLM:\SOFTWARE\Policies\Google\Chrome\ExtensionSettings` for `gffpamdcddmdbeljekjlpaknpmjlglni` with `installation_mode = "normal_installed"` and `update_url = "https://clients2.google.com/service/update2/crx"`.
-- **Why this works cleanly on unmanaged machines:** Chromium's `FilterSensitiveExtensionSettings` policy filter permits `normal_installed` on non-domain-joined Windows machines whenever `update_url` points to Chrome Web Store (`clients2.google.com`) and the extension visibility is Public or Unlisted. Using `normal_installed` automatically provisions the extension on fresh machine setups while still allowing end users to disable or uninstall it freely.
+For unmanaged Enterprise policy deployment, sibling repository [powershell-software-installer](https://github.com/tbruneel/powershell-software-installer) provisions Chrome Web Store ID `gffpamdcddmdbeljekjlpaknpmjlglni` under `HKLM:\SOFTWARE\Policies\Google\Chrome\ExtensionSettings` (`installation_mode = "normal_installed"`, `update_url = "https://clients2.google.com/service/update2/crx"`), which Chromium accepts for Public or Unlisted items so end users still retain enable/uninstall control.
